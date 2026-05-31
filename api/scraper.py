@@ -79,7 +79,7 @@ class JobSearchClient:
                 
         return job
 
-    def search_jobs(self, title: str, location: str = "Canada", max_results: int = 10) -> List[JobPosting]:
+    def search_jobs(self, title: str, location: str = "Canada", max_results: int = 10, start_offset: int = 0) -> List[JobPosting]:
         """
         Uses SerpApi (Google Jobs engine) to find highly accurate job postings in Canada.
         """
@@ -96,7 +96,7 @@ class JobSearchClient:
         
         try:
             # Fetch up to max_results jobs from SerpApi.
-            for start in range(0, max_results, 10):
+            for start in range(start_offset, start_offset + max_results, 10):
                 params["start"] = start
                 response = requests.get(self.base_url, params=params)
                 response.raise_for_status()
