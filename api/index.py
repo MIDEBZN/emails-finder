@@ -27,19 +27,19 @@ class SearchRequest(BaseModel):
     title: str
     location: str = "Canada"
     max_results: int = 10
-    start: int = 0
+    next_page_token: str = None
 
 @app.get("/")
 def read_root():
     return {"message": "Canadian Job & Email API is running! Please use the React frontend at http://localhost:5173"}
 
-@app.post("/api/search", response_model=List[JobPosting])
+@app.post("/api/search")
 async def search_jobs(request: SearchRequest):
     """
     Endpoint to trigger the live DuckDuckGo and BeautifulSoup scraper.
     """
-    jobs = scraper_client.search_jobs(title=request.title, location=request.location, max_results=request.max_results, start_offset=request.start)
-    return jobs
+    result = scraper_client.search_jobs(title=request.title, location=request.location, max_results=request.max_results, next_page_token=request.next_page_token)
+    return result
 
 if __name__ == "__main__":
     import uvicorn

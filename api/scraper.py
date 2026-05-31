@@ -79,7 +79,7 @@ class JobSearchClient:
                 
         return job
 
-    def search_jobs(self, title: str, location: str = "Canada", max_results: int = 10, start_offset: int = 0) -> List[JobPosting]:
+    def search_jobs(self, title: str, location: str = "Canada", max_results: int = 10, next_page_token: str = None):
         """
         Uses SerpApi (Google Jobs engine) to find highly accurate job postings in Canada.
         """
@@ -94,18 +94,17 @@ class JobSearchClient:
             "api_key": self.api_key
         }
         
+        if next_page_token:
+            params["next_page_token"] = next_page_token
+            
         try:
-            # Fetch up to max_results jobs from SerpApi.
-            for start in range(start_offset, start_offset + max_results, 10):
-                params["start"] = start
-                response = requests.get(self.base_url, params=params)
-                response.raise_for_status()
-                data = response.json()
-                
-                job_results = data.get("jobs_results", [])
-                if not job_results:
-                    break # No more pages available
-                
+            response = requests.get(self.base_url, params=params)
+            response.raise_for_status()
+            data = response.json()
+            
+            job_results = data.get("jobs_results", [])
+            
+            if job_results:
                 with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(self.process_job, res, title, location) for res in job_results]
                     for future in concurrent.futures.as_completed(futures):
@@ -115,14 +114,11 @@ class JobSearchClient:
                         except Exception as e:
                             print(f"Error processing job: {e}")
                             
-                        if len(jobs) >= max_results:
-                            break
-                            
-                if len(jobs) >= max_results:
-                    break
-                
+            next_token = data.get("serpapi_pagination", {}).get("next_page_token")
+            
         except Exception as e:
             print(f"SerpApi Search failed: {e}")
+            next_token = None
             
         # Fallback if no jobs were found (e.g. invalid API key or network error)
         if not jobs:
@@ -140,6 +136,6 @@ class JobSearchClient:
                 found_emails = extract_emails_from_text(job.description)
                 for email in found_emails:
                     job.add_email(email=email, source="Fallback Data", confidence=0.99)
-            return mock_jobs
+            return {"jobs": mock_jobs, "next_page_token": None}
 
-        return jobs
+        return {"jobs": jobs, "next_page_token": next_token}

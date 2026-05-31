@@ -20,7 +20,7 @@ function App() {
     const targetResults = parseInt(maxResults) || 10;
     const batchSize = 10;
     let accumulatedResults = [];
-    let startOffset = 0;
+    let nextToken = null;
     let shouldContinue = true;
 
     try {
@@ -34,7 +34,7 @@ function App() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ title, location, max_results: fetchSize, start: startOffset }),
+          body: JSON.stringify({ title, location, max_results: fetchSize, next_page_token: nextToken }),
         });
         
         if (!response.ok) {
@@ -42,28 +42,35 @@ function App() {
         }
         
         const data = await response.json();
+        const newJobs = data.jobs || [];
+        nextToken = data.next_page_token;
         
-        if (data.length === 0) {
+        if (newJobs.length === 0) {
           shouldContinue = false; // No more jobs from API
           break;
         }
 
-        const formattedData = data.map((job, index) => ({
+        const formattedData = newJobs.map((job, index) => ({
           id: accumulatedResults.length + index + 1,
           title: job.title,
           company: job.company,
           location: job.location,
-          emails: job.emails.map(e => e.email), // Extract string emails from ExtractedEmail object
+          emails: job.emails ? job.emails.map(e => e.email) : [], // Extract string emails from ExtractedEmail object
           url: job.url
         }));
         
-        accumulatedResults = [...accumulatedResults, ...formattedData];
+        // Remove exact duplicates from accumulatedResults
+        const uniqueFormattedData = formattedData.filter(newJob => 
+          !accumulatedResults.some(accJob => 
+            accJob.title === newJob.title && accJob.company === newJob.company
+          )
+        );
+        
+        accumulatedResults = [...accumulatedResults, ...uniqueFormattedData];
         setResults([...accumulatedResults]); // Update UI progressively
         
-        startOffset += fetchSize; // Next page
-        
-        // If the API returned fewer results than we asked for, it means we hit the end of available jobs
-        if (data.length < fetchSize) {
+        // If there's no next page token, or the API returned fewer results than we asked for, stop
+        if (!nextToken || newJobs.length < fetchSize) {
           shouldContinue = false;
         }
       }
