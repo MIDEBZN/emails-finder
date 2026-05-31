@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from scraper import JobSearchClient
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from models import JobPosting
 
 app = FastAPI(title="Canadian Job & Email API")
@@ -27,7 +27,7 @@ class SearchRequest(BaseModel):
     title: str
     location: str = "Canada"
     max_results: int = 10
-    next_page_token: str = None
+    next_page_token: Optional[str] = None
 
 @app.get("/")
 def read_root():
