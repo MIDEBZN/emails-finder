@@ -69,8 +69,9 @@ function App() {
         accumulatedResults = [...accumulatedResults, ...uniqueFormattedData];
         setResults([...accumulatedResults]); // Update UI progressively
         
-        // If there's no next page token, or the API returned fewer results than we asked for, stop
-        if (!nextToken || newJobs.length < fetchSize) {
+        // Google Jobs API can return 8 or 9 jobs instead of exactly 10, but still provide a next_page_token.
+        // We only stop if there's no next page token or if no jobs were returned at all.
+        if (!nextToken || newJobs.length === 0) {
           shouldContinue = false;
         }
       }
