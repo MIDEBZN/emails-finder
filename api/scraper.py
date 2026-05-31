@@ -24,8 +24,8 @@ class JobSearchClient:
         }
         
         try:
-            # Fetch up to 50 pages (approx 500 jobs) from SerpApi
-            for start in range(0, 500, 10):
+            # Fetch up to 1 page (approx 10 jobs) from SerpApi to avoid Vercel 10s timeout
+            for start in range(0, 10, 10):
                 params["start"] = start
                 response = requests.get(self.base_url, params=params)
                 response.raise_for_status()
