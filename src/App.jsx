@@ -127,7 +127,6 @@ function App() {
                 value={maxResults}
                 onChange={(e) => setMaxResults(e.target.value)}
                 min="1"
-                max="50"
               />
             </div>
             <button type="submit" className="btn-primary" disabled={isLoading}>

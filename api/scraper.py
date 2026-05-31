@@ -24,9 +24,8 @@ class JobSearchClient:
         }
         
         try:
-            # Fetch up to max_results jobs from SerpApi. Cap at 50 to avoid Vercel timeouts.
-            capped_max = min(max_results, 50)
-            for start in range(0, capped_max, 10):
+            # Fetch up to max_results jobs from SerpApi.
+            for start in range(0, max_results, 10):
                 params["start"] = start
                 response = requests.get(self.base_url, params=params)
                 response.raise_for_status()
