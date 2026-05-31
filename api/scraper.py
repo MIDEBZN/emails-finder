@@ -24,8 +24,9 @@ class JobSearchClient:
         }
         
         try:
-            # Fetch up to 1 page (approx 10 jobs) from SerpApi to avoid Vercel 10s timeout
-            for start in range(0, 10, 10):
+            # Fetch up to max_results jobs from SerpApi. Cap at 50 to avoid Vercel timeouts.
+            capped_max = min(max_results, 50)
+            for start in range(0, capped_max, 10):
                 params["start"] = start
                 response = requests.get(self.base_url, params=params)
                 response.raise_for_status()
@@ -104,6 +105,12 @@ class JobSearchClient:
                             pass # Skip if Hunter fails or rate limits
                             
                     jobs.append(job)
+                    
+                    if len(jobs) >= max_results:
+                        break # Stop if we reached the requested max_results
+                
+                if len(jobs) >= max_results:
+                    break
                 
         except Exception as e:
             print(f"SerpApi Search failed: {e}")

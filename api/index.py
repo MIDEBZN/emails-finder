@@ -26,6 +26,7 @@ scraper_client = JobSearchClient()
 class SearchRequest(BaseModel):
     title: str
     location: str = "Canada"
+    max_results: int = 10
 
 @app.get("/")
 def read_root():
@@ -36,7 +37,7 @@ async def search_jobs(request: SearchRequest):
     """
     Endpoint to trigger the live DuckDuckGo and BeautifulSoup scraper.
     """
-    jobs = scraper_client.search_jobs(title=request.title, location=request.location)
+    jobs = scraper_client.search_jobs(title=request.title, location=request.location, max_results=request.max_results)
     return jobs
 
 if __name__ == "__main__":

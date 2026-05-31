@@ -4,6 +4,7 @@ import './index.css'
 function App() {
   const [title, setTitle] = useState('Data Scientist')
   const [location, setLocation] = useState('Canada')
+  const [maxResults, setMaxResults] = useState(10)
   const [isLoading, setIsLoading] = useState(false)
   const [results, setResults] = useState([])
   const [hasSearched, setHasSearched] = useState(false)
@@ -21,7 +22,7 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ title, location }),
+        body: JSON.stringify({ title, location, max_results: parseInt(maxResults) || 10 }),
       });
       
       if (!response.ok) {
@@ -117,6 +118,16 @@ function App() {
                 placeholder="Location (e.g., Canada, Toronto)" 
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
+              />
+            </div>
+            <div className="input-group">
+              <input 
+                type="number" 
+                placeholder="Max Results (e.g. 10)" 
+                value={maxResults}
+                onChange={(e) => setMaxResults(e.target.value)}
+                min="1"
+                max="50"
               />
             </div>
             <button type="submit" className="btn-primary" disabled={isLoading}>
