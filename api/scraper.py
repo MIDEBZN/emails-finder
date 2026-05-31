@@ -1,4 +1,5 @@
 import requests
+import concurrent.futures
 from typing import List
 from models import JobPosting
 from email_extractor import extract_emails_from_text
@@ -7,6 +8,76 @@ class JobSearchClient:
     def __init__(self, api_key: str = "775a1e0b64dc6f8afa85e37d43bf7e325d7b709839a6e0d59507be2ce4253a07"):
         self.api_key = api_key
         self.base_url = "https://serpapi.com/search.json"
+
+    def process_job(self, res, title, location):
+        job_title = res.get("title", title)
+        company = res.get("company_name", "Unknown Company")
+        job_location = res.get("location", location)
+        description = res.get("description", "")
+        
+        # Get the best available link
+        url = "#"
+        related_links = res.get("related_links", [])
+        if related_links:
+            url = related_links[0].get("link", "#")
+        else:
+            url = res.get("share_link", "#")
+        
+        job = JobPosting(
+            title=job_title,
+            company=company,
+            location=job_location,
+            description=description,
+            url=url
+        )
+        
+        # Extract emails directly from the Google Jobs description text
+        found_emails = extract_emails_from_text(description)
+        for email in found_emails:
+            if "no-reply" not in email and "sentry" not in email:
+                job.add_email(email=email, source="Job Description", confidence=0.90)
+                
+        # Try deep scraping the actual link to find raw emails hidden on the site
+        try:
+            if url != "#" and "google" not in url:
+                import urllib3
+                urllib3.disable_warnings()
+                page_resp = requests.get(url, timeout=4, verify=False, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+                if page_resp.status_code == 200:
+                    # Scan the raw HTML code (page_resp.text) to catch hidden 'mailto:' links,
+                    # JSON configurations, and script-rendered emails that get lost when stripping tags.
+                    deep_emails = extract_emails_from_text(page_resp.text)
+                    
+                    for email in deep_emails:
+                        # Ensure it's unique
+                        if not any(e.email == email for e in job.emails):
+                            job.add_email(email=email, source="Deep HTML Scrape", confidence=0.85)
+        except Exception:
+            pass
+            
+        # If no emails found at all via deep scrape, query Hunter.io's massive B2B database
+        if len(job.emails) == 0 and company != "Unknown Company":
+            try:
+                hunter_url = "https://api.hunter.io/v2/domain-search"
+                hunter_params = {
+                    "company": company,
+                    "api_key": "ddab7b7c51c926e33b368e051b10877024620676",
+                    "limit": 3 # Get top 3 verified emails
+                }
+                hunter_resp = requests.get(hunter_url, params=hunter_params, timeout=4)
+                if hunter_resp.status_code == 200:
+                    hunter_data = hunter_resp.json()
+                    emails_list = hunter_data.get("data", {}).get("emails", [])
+                    for e_obj in emails_list:
+                        hunter_email = e_obj.get("value")
+                        hunter_conf = float(e_obj.get("confidence", 80)) / 100.0
+                        # Ensure it's unique
+                        if hunter_email and not any(e.email == hunter_email for e in job.emails):
+                            job.add_email(email=hunter_email, source="Hunter.io Verified", confidence=hunter_conf)
+            except Exception as e:
+                pass # Skip if Hunter fails or rate limits
+                
+        return job
 
     def search_jobs(self, title: str, location: str = "Canada", max_results: int = 10) -> List[JobPosting]:
         """
@@ -35,79 +106,18 @@ class JobSearchClient:
                 if not job_results:
                     break # No more pages available
                 
-                for res in job_results:
-                    job_title = res.get("title", title)
-                    company = res.get("company_name", "Unknown Company")
-                    job_location = res.get("location", location)
-                    description = res.get("description", "")
-                    
-                    # Get the best available link
-                    url = "#"
-                    related_links = res.get("related_links", [])
-                    if related_links:
-                        url = related_links[0].get("link", "#")
-                    else:
-                        url = res.get("share_link", "#")
-                    
-                    job = JobPosting(
-                        title=job_title,
-                        company=company,
-                        location=job_location,
-                        description=description,
-                        url=url
-                    )
-                    
-                    # Extract emails directly from the Google Jobs description text
-                    found_emails = extract_emails_from_text(description)
-                    for email in found_emails:
-                        if "no-reply" not in email and "sentry" not in email:
-                            job.add_email(email=email, source="Job Description", confidence=0.90)
-                            
-                    # Try deep scraping the actual link to find raw emails hidden on the site
-                    try:
-                        if url != "#" and "google" not in url:
-                            import urllib3
-                            urllib3.disable_warnings()
-                            page_resp = requests.get(url, timeout=4, verify=False, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
-                            if page_resp.status_code == 200:
-                                # Scan the raw HTML code (page_resp.text) to catch hidden 'mailto:' links,
-                                # JSON configurations, and script-rendered emails that get lost when stripping tags.
-                                deep_emails = extract_emails_from_text(page_resp.text)
-                                
-                                for email in deep_emails:
-                                    # Ensure it's unique
-                                    if not any(e.email == email for e in job.emails):
-                                        job.add_email(email=email, source="Deep HTML Scrape", confidence=0.85)
-                    except Exception:
-                        pass
-                        
-                    # If no emails found at all via deep scrape, query Hunter.io's massive B2B database
-                    if len(job.emails) == 0 and company != "Unknown Company":
+                with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                    futures = [executor.submit(self.process_job, res, title, location) for res in job_results]
+                    for future in concurrent.futures.as_completed(futures):
                         try:
-                            hunter_url = "https://api.hunter.io/v2/domain-search"
-                            hunter_params = {
-                                "company": company,
-                                "api_key": "ddab7b7c51c926e33b368e051b10877024620676",
-                                "limit": 3 # Get top 3 verified emails
-                            }
-                            hunter_resp = requests.get(hunter_url, params=hunter_params, timeout=4)
-                            if hunter_resp.status_code == 200:
-                                hunter_data = hunter_resp.json()
-                                emails_list = hunter_data.get("data", {}).get("emails", [])
-                                for e_obj in emails_list:
-                                    hunter_email = e_obj.get("value")
-                                    hunter_conf = float(e_obj.get("confidence", 80)) / 100.0
-                                    # Ensure it's unique
-                                    if hunter_email and not any(e.email == hunter_email for e in job.emails):
-                                        job.add_email(email=hunter_email, source="Hunter.io Verified", confidence=hunter_conf)
+                            job = future.result()
+                            jobs.append(job)
                         except Exception as e:
-                            pass # Skip if Hunter fails or rate limits
+                            print(f"Error processing job: {e}")
                             
-                    jobs.append(job)
-                    
-                    if len(jobs) >= max_results:
-                        break # Stop if we reached the requested max_results
-                
+                        if len(jobs) >= max_results:
+                            break
+                            
                 if len(jobs) >= max_results:
                     break
                 
